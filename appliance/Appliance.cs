@@ -1,19 +1,139 @@
 using System;
+using System.IO;
+using System.Net;
 using System.Text;
 using Microsoft.SPOT;
+using Erlang.NET;
+using HydraMF;
 
 namespace appliance
 {
+    /*
+     * This class takes care of interpreting the Erlang message (which has already
+     * been stripped of the ELIoT driver header), which is comprised of two parts:
+     * the Erlang message header and the Erlang message payload.
+     * If the object has to send an answer back to the caller, the distribution
+     * message (along with the Erlang message header) has to be computed correctly.
+     */
     class Appliance : IMessageParser
     {
-        public void parseMessage(byte[] msg, int len, ref byte[] answer, ref int answerLen)
+        public static readonly byte DIST_MAGIC_RECV_TAG = 131;
+        public static readonly OtpErlangPid THIS = new OtpErlangPid("csharpapp", 1, 0, 1);
+        public static readonly string CODE = "miniapp1";
+        public static readonly char PAD = '0';
+        public static readonly string NAME = "appliance";
+
+        public enum MsgType : byte { SmartMeter = 77, Schedule = 83, ApplianceLocal = 76 }
+        public enum HeaderType { Send = 2, RegSend = 6 }
+
+        private IPAddress smartMeter;
+
+        public void ParseMessage(IPAddress source, byte[] msg, int len, ref byte[] answer, ref int answerLen)
         {
-            StringBuilder bytes = new StringBuilder();
-            for (int i = 0; i < len; ++i)
+            /* Step 1: get the header out */
+            OtpInputStream inStream = new OtpInputStream(msg);
+            OtpErlangTuple header = (OtpErlangTuple)inStream.read_any();
+            OtpErlangLong htype = (OtpErlangLong)header.elementAt(0);
+            if (htype.intValue() != (int)HeaderType.RegSend) return;
+            OtpErlangAtom dest = (OtpErlangAtom)header.elementAt(3);
+            if (!dest.atomValue().Equals(NAME)) return;
+            inStream.setPos(inStream.getPos() + 1);
+            OtpErlangObject payload = inStream.read_any();
+            /* Step 2: extract the payload */
+            byte[] tmp = ((OtpErlangBinary)payload).binaryValue();
+            byte[] content = new byte[tmp.Length];
+            Array.Copy(tmp, 1, content, 0, tmp.Length - 1);
+            /* Step 3: react to the content */
+            switch (content[0])
             {
-                bytes.Append((uint) msg[i] + "");
+                case (byte)MsgType.ApplianceLocal:
+                    /* I should not be receiving this... */
+                    break;
+                case (byte)MsgType.Schedule:
+                    PrintSchedule(content);
+                    break;
+                case (byte)MsgType.SmartMeter:
+                    if (this.smartMeter == null || !this.smartMeter.Equals(source))
+                    {
+                        this.smartMeter = source;
+                        OtpErlangObject hres = PrepareHeader();
+                        OtpErlangObject res = PrepareCode();
+                        OtpOutputStream houtStream = new OtpOutputStream(hres, false);
+                        OtpOutputStream outStream = new OtpOutputStream(res, false);
+                        byte[] hbytes = new byte[houtStream.length()];
+                        byte[] pbytes = new byte[outStream.length()];
+                        houtStream.Read(hbytes, 0, hbytes.Length);
+                        outStream.Read(pbytes, 0, pbytes.Length);
+                        Array.Copy(hbytes, 0, answer, 0, houtStream.length());
+                        Array.Copy(pbytes, 0, answer, houtStream.length(), outStream.length());
+                        answerLen = houtStream.length() + outStream.length();
+                    }
+                    break;
+                default:
+                    Debug.Print("Unknown appliance message " + content[0]);
+                    break;
             }
-            Debug.Print(bytes.ToString());
+            /* Step 4: return the answer (if any) */
+
+            return;
+        }
+
+        /*
+         * Header: {6, FromPid, '', 'sm'}
+         */
+        private OtpErlangObject PrepareHeader()
+        {
+            OtpErlangInt code = new OtpErlangInt((int)HeaderType.RegSend);
+            OtpErlangAtom cookie = new OtpErlangAtom("");
+            OtpErlangAtom dest = new OtpErlangAtom("sm");
+            OtpErlangObject[] elements = new OtpErlangObject[] { code, THIS, cookie, dest };
+            OtpErlangTuple res = new OtpErlangTuple(elements);
+
+            return res;
+        }
+
+        /*
+         * Code: [L|20|20|x]
+         * - L: message type
+         * - 20: hash code (sha1) as characters
+         * - 20: name (padded with char zeros at the beginning)
+         * - x: the binary itself
+         * Everything as a binary.
+         */
+        private OtpErlangObject PrepareCode()
+        {
+            byte[] codebytes = Properties.Resources.miniapp1;
+            SHA1 sha = new SHA1CryptoServiceProvider();
+            byte[] hashbytes = sha.ComputeHash(codebytes);
+            string hash = BitConverter.ToString(hashbytes).Replace("-", "");
+            string name = PadLeft(CODE, 20, PAD);
+            byte[] bres = new byte[41 + codebytes.Length];
+            bres[0] = (byte)MsgType.ApplianceLocal;
+            Array.Copy(UTF8Encoding.UTF8.GetBytes(hash), 0, bres, 1, 20);
+            Array.Copy(UTF8Encoding.UTF8.GetBytes(name), 0, bres, 21, 20);
+            Array.Copy(codebytes, 0, bres, 41, codebytes.Length);
+            OtpErlangBinary res = new OtpErlangBinary(bres);
+
+            return res;
+        }
+
+        private void PrintSchedule(byte[] buf)
+        {
+            Param[] parameters = Param.DecodeParams(buf);
+            Debug.Print("Parameters:");
+            foreach (Param p in parameters)
+            {
+                Debug.Print(p.ToString());
+            }
+            Debug.Print("");
+        }
+
+        private string PadLeft(string input, int times, char c)
+        {
+            StringBuilder res = new StringBuilder(input);
+            res.Insert(0, "" + c, times);
+
+            return res.ToString();
         }
     }
 }

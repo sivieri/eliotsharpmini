@@ -321,8 +321,16 @@ namespace Erlang.NET
         public void write_atom(String atom)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(atom);
-            write1(OtpExternal.atomTag);
-            write2BE(bytes.Length);
+            if (bytes.Length > 255)
+            {
+                write1(OtpExternal.atomTag);
+                write2BE(bytes.Length);
+            }
+            else
+            {
+                write1(OtpExternal.smallAtomTag);
+                write1(bytes.Length);
+            }
             writeN(bytes);
         }
 

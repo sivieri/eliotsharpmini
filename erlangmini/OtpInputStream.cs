@@ -386,12 +386,13 @@ namespace Erlang.NET
 
             tag = read1skip_version();
 
-            if (tag != OtpExternal.atomTag)
+            if (tag != OtpExternal.atomTag && tag != OtpExternal.smallAtomTag)
             {
-                throw new OtpErlangDecodeException("wrong tag encountered, expected " + OtpExternal.atomTag + ", got " + tag);
+                throw new OtpErlangDecodeException("wrong tag encountered, expected " + OtpExternal.atomTag + " or " + OtpExternal.smallAtomTag + ", got " + tag);
             }
 
-            len = read2BE();
+            if (tag == OtpExternal.smallAtomTag) len = read1();
+            else len = read2BE();
 
             strbuf = new byte[len];
             this.readN(strbuf);
@@ -1060,6 +1061,8 @@ namespace Erlang.NET
                     return new OtpErlangLong(this);
 
                 case OtpExternal.atomTag:
+                    return new OtpErlangAtom(this);
+                case OtpExternal.smallAtomTag:
                     return new OtpErlangAtom(this);
 
                 case OtpExternal.floatTag:
