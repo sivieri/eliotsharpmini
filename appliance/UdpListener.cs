@@ -20,6 +20,7 @@ namespace appliance
     {
         public static readonly int PORT = 4369;
         public static readonly int BUF = 1472;
+        public static readonly int MICROWAIT = 100;
 
         public enum MsgType : byte { Data = 68, DataAck = 82, Tick = 84, Ack = 65 }
 
@@ -28,12 +29,12 @@ namespace appliance
         private IMessageParser parser;
         private int counter;
 
-        public UdpListener(IMessageParser parser)
+        public UdpListener(string address, IMessageParser parser)
         {
             this.parser = parser;
             this.counter = 0;
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.Bind(new IPEndPoint(IPAddress.Any, PORT));
+            socket.Bind(new IPEndPoint(IPAddress.Parse(address), PORT));
             listenerThread = new Thread(new ThreadStart(ListenForMessages));
             listenerThread.Start();
         }
@@ -52,6 +53,11 @@ namespace appliance
                 Array.Clear(answer, 0, BUF - 5);
                 answerLen = 0;
                 int len = socket.ReceiveFrom(buf, ref endPoint);
+                if (len == 0) 
+                {
+                    Thread.Sleep(MICROWAIT);
+                    continue;
+                }
                 /* Step 1: check the type, answer it if needed */
                 switch (buf[0])
                 {
@@ -75,7 +81,7 @@ namespace appliance
                 }
                 /* Step 2: pass the message to the application layer */
                 Array.Copy(buf, 5, input, 0, len - 5);
-                parser.ParseMessage(((IPEndPoint)endPoint).Address, input, input.Length, ref answer, ref answerLen);
+                parser.ParseMessage(((IPEndPoint)endPoint).Address, input, len - 5, ref answer, ref answerLen);
                 /* Step 3: if the application layer needs to answer, do it (appending the expected msg header) */
                 if (answerLen > 0)
                 {

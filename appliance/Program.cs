@@ -17,12 +17,12 @@ namespace appliance
 
         public static void Main()
         {
-            SecretLabs.NETMF.Net.Wiznet5100 wiznet = new SecretLabs.NETMF.Net.Wiznet5100(SPI.SPI_module.SPI1, Pins.GPIO_PIN_D10, Pins.GPIO_PIN_D2);
+            SecretLabs.NETMF.Net.Wiznet5100 wiznet = new SecretLabs.NETMF.Net.Wiznet5100(SPI.SPI_module.SPI1, Pins.GPIO_PIN_D10); //, Pins.GPIO_PIN_D2);
             Microsoft.SPOT.Net.NetworkInformation.NetworkInterface networkInterface = NetworkInterface.GetAllNetworkInterfaces()[0];
             networkInterface.PhysicalAddress = MAC;
             networkInterface.EnableStaticIP(ADDRESS, NETMASK, GATEWAY);
             Appliance app = new Appliance();
-            UdpListener listener = new UdpListener(app);
+            UdpListener listener = new UdpListener(ADDRESS, app);
         }
 
     }

@@ -42,10 +42,10 @@ namespace appliance
             OtpErlangObject payload = inStream.read_any();
             /* Step 2: extract the payload */
             byte[] tmp = ((OtpErlangBinary)payload).binaryValue();
-            byte[] content = new byte[tmp.Length];
+            byte[] content = new byte[tmp.Length - 1];
             Array.Copy(tmp, 1, content, 0, tmp.Length - 1);
             /* Step 3: react to the content */
-            switch (content[0])
+            switch (tmp[0])
             {
                 case (byte)MsgType.ApplianceLocal:
                     /* I should not be receiving this... */
@@ -61,13 +61,17 @@ namespace appliance
                         OtpErlangObject res = PrepareCode();
                         OtpOutputStream houtStream = new OtpOutputStream(hres, false);
                         OtpOutputStream outStream = new OtpOutputStream(res, false);
-                        byte[] hbytes = new byte[houtStream.length()];
-                        byte[] pbytes = new byte[outStream.length()];
-                        houtStream.Read(hbytes, 0, hbytes.Length);
-                        outStream.Read(pbytes, 0, pbytes.Length);
-                        Array.Copy(hbytes, 0, answer, 0, houtStream.length());
-                        Array.Copy(pbytes, 0, answer, houtStream.length(), outStream.length());
                         answerLen = houtStream.length() + outStream.length();
+                        houtStream.Seek(0, SeekOrigin.Begin);
+                        for (int i = 0; i < houtStream.length(); ++i )
+                        {
+                            answer[i] = (byte) houtStream.ReadByte();
+                        }
+                        outStream.Seek(0, SeekOrigin.Begin);
+                        for (int i = houtStream.length(); i < answerLen; ++i)
+                        {
+                            answer[i] = (byte)outStream.ReadByte();
+                        }
                     }
                     break;
                 default:
@@ -106,11 +110,10 @@ namespace appliance
             byte[] codebytes = Properties.Resources.GetBytes(Properties.Resources.BinaryResources.miniapp1);
             SHA1 sha = new SHA1CryptoServiceProvider();
             byte[] hashbytes = sha.ComputeHash(codebytes);
-            string hash = BitConverter.ToString(hashbytes);
-            string name = PadLeft(CODE, 20, PAD);
+            string name = PadLeft(CODE, 20 - CODE.Length, PAD);
             byte[] bres = new byte[41 + codebytes.Length];
             bres[0] = (byte)MsgType.ApplianceLocal;
-            Array.Copy(UTF8Encoding.UTF8.GetBytes(hash), 0, bres, 1, 20);
+            Array.Copy(hashbytes, 0, bres, 1, 20);
             Array.Copy(UTF8Encoding.UTF8.GetBytes(name), 0, bres, 21, 20);
             Array.Copy(codebytes, 0, bres, 41, codebytes.Length);
             OtpErlangBinary res = new OtpErlangBinary(bres);
@@ -132,7 +135,7 @@ namespace appliance
         private string PadLeft(string input, int times, char c)
         {
             StringBuilder res = new StringBuilder(input);
-            res.Insert(0, "" + c, times);
+            res.Insert(0, c.ToString(), times);
 
             return res.ToString();
         }

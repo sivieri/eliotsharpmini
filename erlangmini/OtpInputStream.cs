@@ -394,9 +394,16 @@ namespace Erlang.NET
             if (tag == OtpExternal.smallAtomTag) len = read1();
             else len = read2BE();
 
-            strbuf = new byte[len];
-            this.readN(strbuf);
-            atom = OtpErlangString.newString(strbuf);
+            if (len == 0)
+            {
+                atom = "";
+            }
+            else
+            {
+                strbuf = new byte[len];
+                this.readN(strbuf);
+                atom = OtpErlangString.newString(strbuf);
+            }
 
             if (atom.Length > OtpExternal.maxAtomLength)
             {
