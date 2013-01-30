@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.SPOT;
 using Erlang.NET;
@@ -102,10 +103,10 @@ namespace appliance
          */
         private OtpErlangObject PrepareCode()
         {
-            byte[] codebytes = Properties.Resources.miniapp1;
+            byte[] codebytes = Properties.Resources.GetBytes(Properties.Resources.BinaryResources.miniapp1);
             SHA1 sha = new SHA1CryptoServiceProvider();
             byte[] hashbytes = sha.ComputeHash(codebytes);
-            string hash = BitConverter.ToString(hashbytes).Replace("-", "");
+            string hash = BitConverter.ToString(hashbytes);
             string name = PadLeft(CODE, 20, PAD);
             byte[] bres = new byte[41 + codebytes.Length];
             bres[0] = (byte)MsgType.ApplianceLocal;
