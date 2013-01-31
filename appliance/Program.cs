@@ -10,7 +10,7 @@ namespace appliance
 {
     public class Program
     {
-        public static readonly byte[] MAC = new byte[] { 0x90, 0xA2, 0xDA, 0x0D, 0x32, 0xBF };
+        public static readonly byte[] MAC = new byte[] { 0x90, 0xA2, 0xDA, 0x0D, 0x32, 0xCF };
         public static readonly string ADDRESS = "192.168.1.101";
         public static readonly string NETMASK = "255.255.255.0";
         public static readonly string GATEWAY = "192.168.1.1";

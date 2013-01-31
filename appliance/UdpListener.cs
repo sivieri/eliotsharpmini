@@ -22,12 +22,12 @@ namespace appliance
         public static readonly int BUF = 1472;
         public static readonly int MICROWAIT = 100;
 
-        public enum MsgType : byte { Data = 68, DataAck = 82, Tick = 84, Ack = 65 }
+        public enum MsgType : byte { Data = 0, DataAck = 1, Tick = 2, Ack = 3 }
 
         private Thread listenerThread;
         private Socket socket;
         private IMessageParser parser;
-        private int counter;
+        private ushort counter;
 
         public UdpListener(string address, IMessageParser parser)
         {
@@ -42,15 +42,14 @@ namespace appliance
         private void ListenForMessages()
         {
             byte[] buf = new byte[BUF];
-            byte[] input = new byte[BUF - 5];
-            byte[] answer = new byte[BUF - 5];
-            byte[] n = new byte[4];
+            byte[] input = new byte[BUF - 2];
+            byte[] answer = new byte[BUF - 2];
             int answerLen = 0;
             EndPoint endPoint = new IPEndPoint(IPAddress.Any, 0);
             for (; ; )
             {
                 Array.Clear(buf, 0, BUF);
-                Array.Clear(answer, 0, BUF - 5);
+                Array.Clear(answer, 0, BUF - 2);
                 answerLen = 0;
                 int len = socket.ReceiveFrom(buf, ref endPoint);
                 if (len == 0) 
@@ -59,7 +58,9 @@ namespace appliance
                     continue;
                 }
                 /* Step 1: check the type, answer it if needed */
-                switch (buf[0])
+                ushort type = unchecked((ushort) (BitConverter.ToUInt16(buf, 0) >> 12));
+                ushort n = unchecked((ushort) (BitConverter.ToUInt16(buf, 0) & 0x0FFF));
+                switch (type)
                 {
                     case (byte)MsgType.Ack:
                         /* Not implemented yet */
@@ -69,37 +70,38 @@ namespace appliance
                         break;
                     case (byte)MsgType.DataAck:
                         /* Send the ack back */
-                        Array.Copy(buf, 1, n, 0, 4);
                         SendAck(endPoint, n);
                         break;
                     case (byte)MsgType.Tick:
                         /* Ignoring */
                         break;
                     default:
-                        Debug.Print("Unknown UDP message " + buf[0]);
+                        Debug.Print("Unknown UDP message " + type);
                         continue;
                 }
                 /* Step 2: pass the message to the application layer */
-                Array.Copy(buf, 5, input, 0, len - 5);
-                parser.ParseMessage(((IPEndPoint)endPoint).Address, input, len - 5, ref answer, ref answerLen);
+                Array.Copy(buf, 2, input, 0, len - 2);
+                parser.ParseMessage(((IPEndPoint)endPoint).Address, input, len - 2, ref answer, ref answerLen);
                 /* Step 3: if the application layer needs to answer, do it (appending the expected msg header) */
                 if (answerLen > 0)
                 {
                     Array.Clear(buf, 0, BUF);
-                    buf[0] = (byte)MsgType.Data;
-                    Array.Copy(BitConverter.GetBytes(this.counter++), 0, buf, 1, 4);
-                    Array.Copy(answer, 0, buf, 5, answerLen);
+                    type = (ushort)MsgType.Data;
+                    ushort hdr = unchecked((ushort) (type << 12 | this.counter++));
+                    Array.Copy(BitConverter.GetBytes(hdr), 0, buf, 0, 2);
+                    Array.Copy(answer, 0, buf, 2, answerLen);
                     EndPoint endPoint2 = new IPEndPoint(((IPEndPoint)endPoint).Address, PORT);
-                    socket.SendTo(buf, answerLen + 5, SocketFlags.None, endPoint2);
+                    socket.SendTo(buf, answerLen + 2, SocketFlags.None, endPoint2);
                 }
             }
         }
 
-        private void SendAck(EndPoint endPoint, byte[] n)
+        private void SendAck(EndPoint endPoint, ushort n)
         {
-            byte[] msg = new byte[5];
+            byte[] msg = new byte[3];
+            byte[] nbytes = BitConverter.GetBytes(n);
             msg[0] = (byte)MsgType.Ack;
-            Array.Copy(n, 0, msg, 1, n.Length);
+            Array.Copy(nbytes, 0, msg, 1, 2);
             socket.SendTo(msg, endPoint);
         }
     }

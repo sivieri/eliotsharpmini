@@ -19,10 +19,8 @@ namespace appliance
     class Appliance : IMessageParser
     {
         public static readonly byte DIST_MAGIC_RECV_TAG = 131;
-        public static readonly OtpErlangPid THIS = new OtpErlangPid("csharpapp", 1, 0, 1);
         public static readonly string CODE = "miniapp1";
-        public static readonly char PAD = '0';
-        public static readonly string NAME = "appliance";
+        public static readonly string NAME = "sm";
 
         public enum MsgType : byte { SmartMeter = 77, Schedule = 83, ApplianceLocal = 76 }
         public enum HeaderType { Send = 2, RegSend = 6 }
@@ -36,7 +34,7 @@ namespace appliance
             OtpErlangTuple header = (OtpErlangTuple)inStream.read_any();
             OtpErlangLong htype = (OtpErlangLong)header.elementAt(0);
             if (htype.intValue() != (int)HeaderType.RegSend) return;
-            OtpErlangAtom dest = (OtpErlangAtom)header.elementAt(3);
+            OtpErlangAtom dest = (OtpErlangAtom)header.elementAt(1);
             if (!dest.atomValue().Equals(NAME)) return;
             inStream.setPos(inStream.getPos() + 1);
             OtpErlangObject payload = inStream.read_any();
@@ -84,14 +82,13 @@ namespace appliance
         }
 
         /*
-         * Header: {6, FromPid, '', 'sm'}
+         * Header: {6, 'sm'}
          */
         private OtpErlangObject PrepareHeader()
         {
             OtpErlangInt code = new OtpErlangInt((int)HeaderType.RegSend);
-            OtpErlangAtom cookie = new OtpErlangAtom("");
             OtpErlangAtom dest = new OtpErlangAtom("sm");
-            OtpErlangObject[] elements = new OtpErlangObject[] { code, THIS, cookie, dest };
+            OtpErlangObject[] elements = new OtpErlangObject[] { code, dest };
             OtpErlangTuple res = new OtpErlangTuple(elements);
 
             return res;
@@ -110,12 +107,12 @@ namespace appliance
             byte[] codebytes = Properties.Resources.GetBytes(Properties.Resources.BinaryResources.miniapp1);
             SHA1 sha = new SHA1CryptoServiceProvider();
             byte[] hashbytes = sha.ComputeHash(codebytes);
-            string name = PadLeft(CODE, 20 - CODE.Length, PAD);
-            byte[] bres = new byte[41 + codebytes.Length];
+            byte[] bres = new byte[22 + CODE.Length + codebytes.Length];
             bres[0] = (byte)MsgType.ApplianceLocal;
             Array.Copy(hashbytes, 0, bres, 1, 20);
-            Array.Copy(UTF8Encoding.UTF8.GetBytes(name), 0, bres, 21, 20);
-            Array.Copy(codebytes, 0, bres, 41, codebytes.Length);
+            bres[21] = (byte)CODE.Length;
+            Array.Copy(UTF8Encoding.UTF8.GetBytes(CODE), 0, bres, 22, CODE.Length);
+            Array.Copy(codebytes, 0, bres, 22 + CODE.Length, codebytes.Length);
             OtpErlangBinary res = new OtpErlangBinary(bres);
 
             return res;
@@ -130,14 +127,6 @@ namespace appliance
                 Debug.Print(p.ToString());
             }
             Debug.Print("");
-        }
-
-        private string PadLeft(string input, int times, char c)
-        {
-            StringBuilder res = new StringBuilder(input);
-            res.Insert(0, c.ToString(), times);
-
-            return res.ToString();
         }
     }
 }
